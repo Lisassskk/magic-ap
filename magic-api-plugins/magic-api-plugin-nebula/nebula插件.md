@@ -1,0 +1,99 @@
+---
+title: nebula插件
+date: 2023-08-16 09:16:55
+---
+
+### 引入依赖
+
+```xml
+
+<dependency>
+    <groupId>org.ssssssss</groupId>
+    <artifactId>magic-api-plugin-nebula</artifactId>
+    <version>magic-api-lastest-version</version>
+</dependency>
+```
+
+### 配置
+
+```yml
+nebula:
+  hostAddress: ${NEBULA_HOSTADDRESS:localhost:9669}
+  userName: ${NEBULA_USERNAME:root}
+  password: ${NEBULA_PASSWORD:nebula}
+
+```
+
+### 使用
+
+```js
+import nebula;
+var ngsl = 
+    """"
+        USE db_name;MATCH p_=(p:`assignee`)-[*3]-(p2:`transferor`) where  id(p2) == "abc"  or id(p)== "abc" RETURN p_ limit 1000'
+    """
+var resultJson = nebula.executeJson(ngsl)
+nebula.convert(resultJson)
+
+
+nebula.executeNebulaModel(ngsl)
+
+其他支持的方法不太常用, 这里不再一一列举, 可参考源码
+org.ssssssss.magicapi.nebula.NebulaModule
+```
+
+#### 返回的数据格式为:
+```
+    该结构的数据可被很多前端组件库支持进行可视化展示
+```
+如: [angv G6](http://antv-2018.alipay.com/zh-cn/g6/3.x/demo/index.html)
+
+
+```json
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "nodes": [
+            {
+                "edgeSize": 1,
+                "assignee.name": "",
+                "type": "vertex",
+                "assignee.addr": "",
+                "assignee.legal_person": "",
+                "registrant.addr": "",
+                "registrant.name": "",
+                "id": "",
+                "assignee.type": "企业"
+            },
+            {
+                "edgeSize": 15,
+                "type": "vertex",
+                "transferor.name": "",
+                "transferor.legal_person": "",
+                "transferor.type": "",
+                "transferor.addr": "",
+                "registrant.addr": "",
+                "registrant.name": "",
+                "id": ""
+            }, ...
+        ],
+        "edges": [
+            {
+                "dst": "",
+                "src": "",
+                "source": "",
+                "label": "trans_with",
+                "type": "edge",
+                "target": "",
+                "name": "trans_with",
+                "ranking": 0,
+                "value": 0
+            },...
+        ]
+    },
+    "timestamp": 1692149280167,
+    "requestTime": 1692149280143,
+    "executeTime": 24
+}
+```
