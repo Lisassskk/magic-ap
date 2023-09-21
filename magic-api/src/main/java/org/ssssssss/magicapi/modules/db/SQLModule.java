@@ -17,6 +17,7 @@ import org.ssssssss.magicapi.modules.db.dialect.DialectAdapter;
 import org.ssssssss.magicapi.modules.db.inteceptor.NamedTableInterceptor;
 import org.ssssssss.magicapi.modules.db.inteceptor.SQLInterceptor;
 import org.ssssssss.magicapi.modules.db.model.Page;
+import org.ssssssss.magicapi.modules.db.model.PageResult;
 import org.ssssssss.magicapi.modules.db.model.SqlTypes;
 import org.ssssssss.magicapi.modules.db.provider.PageProvider;
 import org.ssssssss.magicapi.modules.db.table.NamedTable;
@@ -550,7 +551,7 @@ public class SQLModule implements DynamicAttribute<SQLModule, SQLModule>, Dynami
 	}
 
 	@Transient
-	public Object page(BoundSql boundSql) {
+	public PageResult page(BoundSql boundSql) {
 		Page page = pageProvider.getPage(boundSql.getRuntimeContext());
 		return page(boundSql, page);
 	}
@@ -598,7 +599,7 @@ public class SQLModule implements DynamicAttribute<SQLModule, SQLModule>, Dynami
 		return page(count, boundSql, new Page(limit, offset), null);
 	}
 
-	private Object page(int count, BoundSql boundSql, Page page, Dialect dialect) {
+	private PageResult page(int count, BoundSql boundSql, Page page, Dialect dialect) {
 		List<Map<String, Object>> list = null;
 		if (count > 0) {
 			if (dialect == null) {
@@ -612,7 +613,7 @@ public class SQLModule implements DynamicAttribute<SQLModule, SQLModule>, Dynami
 	}
 
 	@Transient
-	public Object page(BoundSql boundSql, Page page) {
+	public PageResult page(BoundSql boundSql, Page page) {
 		assertDatasourceNotNull();
 		Dialect dialect = dataSourceNode.getDialect(dialectAdapter);
 		BoundSql countBoundSql = boundSql.copy(dialect.getCountSql(boundSql.getSql()));
@@ -721,7 +722,12 @@ public class SQLModule implements DynamicAttribute<SQLModule, SQLModule>, Dynami
 
 	@Comment("指定table，进行单表操作")
 	public NamedTable table(@Comment(name = "tableName", value = "表名") String tableName) {
-		return new NamedTable(tableName, this, rowMapColumnMapper, namedTableInterceptors);
+		return new NamedTable(tableName, null, this, rowMapColumnMapper, namedTableInterceptors);
+	}
+
+	@Comment("指定table，进行单表操作")
+	public NamedTable table(@Comment(name = "tableName", value = "表名") String tableName, @Comment(name = "alias", value = "别名") String alias) {
+		return new NamedTable(tableName, alias, this, rowMapColumnMapper, namedTableInterceptors);
 	}
 
 	private BoundSql buildPageBoundSql(Dialect dialect, BoundSql boundSql, long offset, long limit) {

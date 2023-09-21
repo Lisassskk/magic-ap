@@ -37,12 +37,14 @@ public class PascalColumnMapperProvider implements ColumnMapperProvider {
 	@Override
 	public String unmapping(String name) {
 		StringBuilder sb = new StringBuilder();
+		boolean isFirst = true;
 		for (int i = 0; i < name.length(); i++) {
 			char ch = name.charAt(i);
-			if (i > 0 && Character.isUpperCase(ch)) {
+			if (!isFirst && Character.isUpperCase(ch)) {
 				sb.append("_");
 			}
 			sb.append(Character.toLowerCase(ch));
+			isFirst = (ch == '.' || ch == ' ');
 		}
 		return sb.toString();
 	}

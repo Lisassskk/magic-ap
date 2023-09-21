@@ -1,14 +1,16 @@
 package org.ssssssss.magicapi.modules.db.table;
 
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.util.CollectionUtils;
 import org.ssssssss.magicapi.core.context.RequestContext;
-import org.ssssssss.magicapi.core.exception.MagicAPIException;
-import org.ssssssss.magicapi.core.model.Attributes;
 import org.ssssssss.magicapi.core.context.RequestEntity;
+import org.ssssssss.magicapi.core.exception.MagicAPIException;
 import org.ssssssss.magicapi.modules.db.BoundSql;
-import org.ssssssss.magicapi.modules.db.inteceptor.NamedTableInterceptor;
 import org.ssssssss.magicapi.modules.db.SQLModule;
+import org.ssssssss.magicapi.modules.db.inteceptor.NamedTableInterceptor;
 import org.ssssssss.magicapi.modules.db.model.Page;
+import org.ssssssss.magicapi.modules.db.model.PageResult;
 import org.ssssssss.magicapi.modules.db.model.SqlMode;
 import org.ssssssss.script.annotation.Comment;
 import org.ssssssss.script.runtime.RuntimeContext;
@@ -25,17 +27,7 @@ import java.util.stream.Collectors;
  *
  * @author mxd
  */
-public class NamedTable extends Attributes<Object> {
-
-	String tableName;
-
-	SQLModule sqlModule;
-
-	String primary;
-
-	String logicDeleteColumn;
-
-	Object logicDeleteValue;
+public class NamedTable extends TableBase implements JoinInterface {
 
 	Map<String, Object> columns = new HashMap<>();
 
@@ -47,38 +39,20 @@ public class NamedTable extends Attributes<Object> {
 
 	Set<String> excludeColumns = new HashSet<>();
 
-	Function<String, String> rowMapColumnMapper;
-
 	Object defaultPrimaryValue;
 
-	boolean useLogic = false;
+	boolean useDistinct = false;
 
 	boolean withBlank = false;
 
-	List<NamedTableInterceptor> namedTableInterceptors;
-
 	Where where = new Where(this);
 
-	public NamedTable(String tableName, SQLModule sqlModule, Function<String, String> rowMapColumnMapper, List<NamedTableInterceptor> namedTableInterceptors) {
-		this.tableName = tableName;
-		this.sqlModule = sqlModule;
-		this.rowMapColumnMapper = rowMapColumnMapper;
-		this.namedTableInterceptors = namedTableInterceptors;
-		this.logicDeleteColumn = sqlModule.getLogicDeleteColumn();
-		String deleteValue = sqlModule.getLogicDeleteValue();
-		this.logicDeleteValue = deleteValue;
-		if (deleteValue != null) {
-			boolean isString = deleteValue.startsWith("'") || deleteValue.startsWith("\"");
-			if (isString && deleteValue.length() > 2) {
-				this.logicDeleteValue = deleteValue.substring(1, deleteValue.length() - 1);
-			} else {
-				try {
-					this.logicDeleteValue = Integer.parseInt(deleteValue);
-				} catch (NumberFormatException e) {
-					this.logicDeleteValue = deleteValue;
-				}
-			}
-		}
+	List<JoinedTable> joinedTables = new ArrayList<>();
+
+	List<NamedTable> mappedTables = new ArrayList<>();
+
+	public NamedTable(String tableName, String alias, SQLModule sqlModule, Function<String, String> rowMapColumnMapper, List<NamedTableInterceptor> namedTableInterceptors) {
+		super(tableName, alias, sqlModule, rowMapColumnMapper, namedTableInterceptors);
 	}
 
 	private NamedTable() {
@@ -87,25 +61,92 @@ public class NamedTable extends Attributes<Object> {
 	@Override
 	@Comment("克隆")
 	public NamedTable clone() {
-		NamedTable namedTable = new NamedTable();
-		namedTable.tableName = this.tableName;
-		namedTable.sqlModule = this.sqlModule;
-		namedTable.primary = this.primary;
-		namedTable.logicDeleteValue = this.logicDeleteValue;
-		namedTable.logicDeleteColumn = this.logicDeleteColumn;
+		NamedTable namedTable = (NamedTable) super.clone();
 		namedTable.columns = new HashMap<>(this.columns);
 		namedTable.fields = new ArrayList<>(fields);
 		namedTable.groups = new ArrayList<>(groups);
 		namedTable.orders = new ArrayList<>(orders);
+		namedTable.joinedTables = new ArrayList<>(joinedTables);
+		namedTable.mappedTables = new ArrayList<>(mappedTables);
 		namedTable.excludeColumns = new HashSet<>(excludeColumns);
 		namedTable.rowMapColumnMapper = this.rowMapColumnMapper;
 		namedTable.defaultPrimaryValue = this.defaultPrimaryValue;
+		namedTable.useDistinct = this.useDistinct;
 		namedTable.useLogic = this.useLogic;
 		namedTable.withBlank = this.withBlank;
 		namedTable.where = this.where == null ? null : this.where.clone();
-		namedTable.namedTableInterceptors = this.namedTableInterceptors;
-		namedTable.properties = this.properties;
 		return namedTable;
+	}
+
+	@Override
+	@Transient
+	@Comment("拼接join")
+	public JoinedTable join(boolean condition, String joinType, String tableName, String alias) {
+		JoinedTable join = new JoinedTable(this, tableName, alias);
+		join.joinType = joinType;
+		if (condition) {
+			joinedTables.add(join);
+		}
+		return join;
+	}
+
+	@Comment("字段映射")
+	public NamedTable mapping(@Comment(name = "condition", value = "判断表达式，当为true时拼接条件") boolean condition,
+							  @Comment(name = "tableName", value = "映射表名") String tableName,
+							  @Comment(name = "keyProperty", value = "映射主键属性") String keyProperty,
+							  @Comment(name = "property", value = "源属性") String property,
+							  @Comment(name = "properties", value = "映射属性集合") String... properties) {
+		if (condition) {
+			NamedTable map = new NamedTable(tableName, null, sqlModule, rowMapColumnMapper, namedTableInterceptors);
+			map.column(keyProperty).columns(properties);
+			map.where.tokens.add(keyProperty);
+			map.where.params.add(property);
+			mappedTables.add(map);
+		}
+		return this;
+	}
+
+	@Comment("字段映射")
+	public NamedTable mapping(@Comment(name = "tableName", value = "映射表名") String tableName,
+						  @Comment(name = "keyProperty", value = "映射主键属性") String keyProperty,
+						  @Comment(name = "property", value = "源属性") String property,
+						  @Comment(name = "properties", value = "映射字段集合") String... properties) {
+		return mapping(true, tableName, keyProperty, property, properties);
+	}
+
+	@Comment("字典映射")
+	public NamedTable dict(@Comment(name = "condition", value = "判断表达式，当为true时拼接条件") boolean condition,
+						   @Comment(name = "tableName", value = "字典项表名") String tableName,
+						   @Comment(name = "typeProperty", value = "字典类型属性") String typeProperty,
+						   @Comment(name = "typeValue", value = "字典类型值") String typeValue,
+						   @Comment(name = "valueProperty", value = "查询字典项属性") String valueProperty,
+						   @Comment(name = "property", value = "源属性") String property,
+						   @Comment(name = "properties", value = "映射字段集合") String... properties) {
+		if (condition) {
+			NamedTable map = new NamedTable(tableName, null, sqlModule, rowMapColumnMapper, namedTableInterceptors);
+			map.column(valueProperty).columns(properties);
+			map.where.tokens.add(valueProperty);
+			map.where.params.add(property);
+			map.where.eq(typeProperty, typeValue);
+			mappedTables.add(map);
+		}
+		return this;
+	}
+
+	@Comment("字典映射")
+	public NamedTable dict(@Comment(name = "tableName", value = "字典项表名") String tableName,
+						   @Comment(name = "typeProperty", value = "字典类型字段") String typeProperty,
+						   @Comment(name = "typeValue", value = "字典类型值") String typeValue,
+						   @Comment(name = "valueProperty", value = "查询字典项字段") String valueProperty,
+						   @Comment(name = "property", value = "源属性") String property,
+						   @Comment(name = "properties", value = "映射字段集合") String... properties) {
+		return dict(true, tableName, typeProperty, typeValue, valueProperty, property, properties);
+	}
+
+	@Comment("使用去重")
+	public NamedTable distinct() {
+		this.useDistinct = true;
+		return this;
 	}
 
 	@Comment("使用逻辑删除")
@@ -204,6 +245,25 @@ public class NamedTable extends Attributes<Object> {
 		return this;
 	}
 
+	@Comment("设置查询的列，如`column('t', 'a', 'a1')` -> `select t.a as a1`")
+	public NamedTable columnAs(@Comment(name = "tableAlias", value = "表别名") String tableAlias,
+							   @Comment(name = "property", value = "查询的列") String property,
+							   @Comment(name = "alias", value = "列别名") String alias) {
+		if (StringUtils.isNotBlank(property)) {
+			this.fields.add(tableAlias + DbConstant.DOT + this.rowMapColumnMapper.apply(property) + DbConstant.AS + this.rowMapColumnMapper.apply(alias));
+		}
+		return this;
+	}
+
+	@Comment("设置查询的列，如`column('a', 'a1')` -> `select a as a1`")
+	public NamedTable columnAs(@Comment(name = "property", value = "查询的列") String property,
+							   @Comment(name = "alias", value = "列别名") String alias) {
+		if (StringUtils.isNotBlank(property)) {
+			this.fields.add(this.rowMapColumnMapper.apply(property) + DbConstant.AS + this.rowMapColumnMapper.apply(alias));
+		}
+		return this;
+	}
+
 	@Comment("拼接`order by xxx asc/desc`")
 	public NamedTable orderBy(@Comment(name = "property", value = "要排序的列") String property,
 							  @Comment(name = "sort", value = "`asc`或`desc`") String sort) {
@@ -260,8 +320,9 @@ public class NamedTable extends Attributes<Object> {
 		builder.append(")");
 		Object value = sqlModule.insert(new BoundSql(runtimeContext, builder.toString(), entries.stream().map(Map.Entry::getValue).collect(Collectors.toList()), sqlModule), this.primary);
 		if(value == null && StringUtils.isNotBlank(this.primary)){
-			return this.columns.get(this.primary);
+			value = this.columns.get(this.primary);
 		}
+		data.put(this.primary, value);
 		return value;
 	}
 
@@ -358,30 +419,66 @@ public class NamedTable extends Attributes<Object> {
 		return batchInsert(collection, 100);
 	}
 
+	private void mapperResults(RuntimeContext runtimeContext, List<Map<String, Object>> results) {
+		if (CollectionUtils.isEmpty(results)) {
+			return;
+		}
+		for (NamedTable mappedTable : mappedTables) {
+			Object property = mappedTable.where.params.get(0);
+			List<Map<String, Object>> mapResults = results.stream()
+					.filter(x -> ObjectUtils.isNotEmpty(x.get(property))).collect(Collectors.toList());
+			if (CollectionUtils.isEmpty(mapResults)) {
+				continue;
+			}
+			String field = mappedTable.where.tokens.get(0);
+			mappedTable.where.tokens.remove(0);
+			mappedTable.where.params.remove(0);
+			mappedTable.where.in(field, mapResults.stream().map(x -> x.get(property)).distinct().collect(Collectors.toList()));
+			Map<Object, Map<String, Object>> mappedMap = mappedTable.select(runtimeContext).stream()
+					.collect(Collectors.toMap(x -> x.get(field), x -> {
+						x.remove(field);
+						return x;
+					}, (x, y) -> x));
+			mapResults.stream().forEach(x -> {
+				if (mappedMap.containsKey(x.get(property))) {
+					x.putAll(mappedMap.get(x.get(property)));
+				}
+			});
+		}
+	}
+
 	@Comment("执行`select`查询")
 	public List<Map<String, Object>> select(RuntimeContext runtimeContext) {
 		preHandle(SqlMode.SELECT);
-		return sqlModule.select(buildSelect(runtimeContext));
+		List<Map<String, Object>> results = sqlModule.select(buildSelect(runtimeContext));
+		mapperResults(runtimeContext, results);
+		return results;
 	}
 
 	@Comment("执行`selectOne`查询")
 	public Map<String, Object> selectOne(RuntimeContext runtimeContext) {
 		preHandle(SqlMode.SELECT_ONE);
-		return sqlModule.selectOne(buildSelect(runtimeContext));
+		Map<String, Object> result = sqlModule.selectOne(buildSelect(runtimeContext));
+		mapperResults(runtimeContext, Arrays.asList(result));
+		return result;
 	}
 
 	@Comment("执行分页查询")
-	public Object page(RuntimeContext runtimeContext) {
+	public PageResult page(RuntimeContext runtimeContext) {
 		preHandle(SqlMode.PAGE);
-		return sqlModule.page(buildSelect(runtimeContext));
+		PageResult pageResult = sqlModule.page(buildSelect(runtimeContext));
+		mapperResults(runtimeContext, pageResult.getList());
+		return pageResult;
 	}
 
 	@Comment("执行分页查询，分页条件手动传入")
-	public Object page(RuntimeContext runtimeContext,
+	public PageResult page(RuntimeContext runtimeContext,
 					   @Comment(name = "limit", value = "限制条数") long limit,
 					   @Comment(name = "offset", value = "跳过条数") long offset) {
 		preHandle(SqlMode.PAGE);
-		return sqlModule.page(buildSelect(runtimeContext), new Page(limit, offset));
+		PageResult pageResult = sqlModule.page(buildSelect(runtimeContext), new Page(limit, offset));
+		mapperResults(runtimeContext, pageResult.getList());
+		return pageResult;
 	}
 
 	@Comment("执行update语句")
@@ -441,8 +538,10 @@ public class NamedTable extends Attributes<Object> {
 	public int count(RuntimeContext runtimeContext) {
 		preHandle(SqlMode.COUNT);
 		StringBuilder builder = new StringBuilder();
-		builder.append("select count(1) from ").append(tableName);
-		List<Object> params = buildWhere(builder);
+		builder.append("select count(1) from ").append(getAlisName(tableName));
+		List<Object> params = new ArrayList<>();
+		params.addAll(buildJoin(builder));
+		params.addAll(buildWhere(builder));
 		return sqlModule.selectInt(new BoundSql(runtimeContext, builder.toString(), params, sqlModule));
 	}
 
@@ -477,13 +576,18 @@ public class NamedTable extends Attributes<Object> {
 		List<String> fields = this.fields.stream()
 				.filter(it -> !excludeColumns.contains(it))
 				.collect(Collectors.toList());
+		if (this.useDistinct) {
+			builder.append("distinct ");
+		}
 		if (fields.isEmpty()) {
-			builder.append("*");
+			builder.append(withAlis("*"));
 		} else {
 			builder.append(StringUtils.join(fields, ","));
 		}
-		builder.append(" from ").append(tableName);
-		List<Object> params = buildWhere(builder);
+		builder.append(" from ").append(getAlisName(tableName));
+		List<Object> params = new ArrayList<>();
+		params.addAll(buildJoin(builder));
+		params.addAll(buildWhere(builder));
         if (!groups.isEmpty()) {
 			builder.append(" group by ");
 			builder.append(String.join(",", groups));
@@ -497,74 +601,42 @@ public class NamedTable extends Attributes<Object> {
 		return boundSql;
 	}
 
+	private List<Object> buildJoin(StringBuilder builder) {
+		List<Object> params = new ArrayList<>();
+		for (JoinedTable sub : joinedTables) {
+			builder.append(sub.joinType)
+					.append(sub.getAlisName(sub.tableName));
+			On on = sub.on;
+			if (!on.isEmpty()) {
+				on.and();
+				on.ne(sub.isUseLogic(), sub.withAlis(logicDeleteColumn), logicDeleteValue);
+				builder.append(on.getSql());
+				params.addAll(on.getParams());
+			} else if (sub.isUseLogic()) {
+				on.ne(sub.withAlis(logicDeleteColumn), logicDeleteValue);
+				builder.append(on.getSql());
+				params.addAll(on.getParams());
+			}
+		}
+		return params;
+	}
+
 
 	private List<Object> buildWhere(StringBuilder builder) {
 		List<Object> params = new ArrayList<>();
 		if (!where.isEmpty()) {
 			where.and();
-			where.ne(useLogic, logicDeleteColumn, logicDeleteValue);
+			where.ne(useLogic, withAlis(logicDeleteColumn), logicDeleteValue);
 			builder.append(where.getSql());
 			params.addAll(where.getParams());
 		} else if (useLogic) {
-			where.ne(logicDeleteColumn, logicDeleteValue);
+			where.ne(withAlis(logicDeleteColumn), logicDeleteValue);
 			builder.append(where.getSql());
 			params.addAll(where.getParams());
 		}
 		return params;
 	}
 
-
-	/**
-	 * 获取查询的表名
-	 *
-	 * @return 表名
-	 */
-	@Transient
-	public String getTableName() {
-		return tableName;
-	}
-
-	/**
-	 * 设置表名
-	 *
-	 * @param tableName 表名
-	 */
-	@Transient
-	public void setTableName(String tableName) {
-		this.tableName = tableName;
-	}
-
-	/**
-	 * 获取SQL模块
-	 */
-	@Transient
-	public SQLModule getSqlModule() {
-		return sqlModule;
-	}
-
-	/**
-	 * 获取主键列
-	 */
-	@Transient
-	public String getPrimary() {
-		return primary;
-	}
-
-	/**
-	 * 获取逻辑删除列
-	 */
-	@Transient
-	public String getLogicDeleteColumn() {
-		return logicDeleteColumn;
-	}
-
-	/**
-	 * 获取逻辑删除值
-	 */
-	@Transient
-	public Object getLogicDeleteValue() {
-		return logicDeleteValue;
-	}
 
 	/**
 	 * 获取设置的columns
@@ -657,19 +729,19 @@ public class NamedTable extends Attributes<Object> {
 	}
 
 	/**
-	 * 是否设逻辑了逻辑删除
+	 * 是否使用排他
 	 */
 	@Transient
-	public boolean isUseLogic() {
-		return useLogic;
+	public boolean isUseDistinct() {
+		return useDistinct;
 	}
 
 	/**
-	 * 设置是否使用逻辑删除
+	 * 设置是否使用排他
 	 */
 	@Transient
-	public void setUseLogic(boolean useLogic) {
-		this.useLogic = useLogic;
+	public void setUseDistinct(boolean useDistinct) {
+		this.useDistinct = useDistinct;
 	}
 
 	/**
