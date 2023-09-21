@@ -223,7 +223,7 @@ public class WhereBase {
     }
 
     @Transient
-    @Comment("等于`=`,如：`exists('table_name', 'tn', namedWhere -> namedWhere.eq2('tn.aId','a.id').eq('tn.name','老王'), true) ---> exists(select 1 from table_name as tn namedWhere tn.a_id=a.id and tn.user_id='老王' and tn.del_flag<>1`")
+    @Comment("等于`=`,如：`notExists('table_name', 'tn', namedWhere -> namedWhere.eq2('tn.aId','a.id').eq('tn.name','老王'), true) ---> not exists(select 1 from table_name as tn namedWhere tn.a_id=a.id and tn.user_id='老王' and tn.del_flag<>1`")
     WhereBase notExists(@Comment(name = "tableName", value = "表名") String tableName,
                         @Comment(name = "alias", value = "别名") String alias,
                         @Comment(name = "function", value = "关联条件") Function<WhereBase, WhereBase> function,
@@ -232,7 +232,7 @@ public class WhereBase {
     }
 
     @Transient
-    @Comment("等于`=`,如：`exists(true, 'table_name', 'tn', namedWhere -> namedWhere.eq2('tn.aId','a.id').eq('tn.name','老王')) ---> exists(select 1 from table_name as tn namedWhere tn.a_id=a.id and tn.user_id='老王'`")
+    @Comment("等于`=`,如：`notExists(true, 'table_name', 'tn', namedWhere -> namedWhere.eq2('tn.aId','a.id').eq('tn.name','老王')) ---> not exists(select 1 from table_name as tn namedWhere tn.a_id=a.id and tn.user_id='老王'`")
     WhereBase notExists(@Comment(name = "tableName", value = "表名") String tableName,
                         @Comment(name = "alias", value = "别名") String alias,
                         @Comment(name = "function", value = "关联条件") Function<WhereBase, WhereBase> function) {
@@ -430,7 +430,7 @@ public class WhereBase {
                  @Comment(name = "value", value = "值") Object value) {
         if (condition && value != null) {
             List<Object> objects = StreamExtension.arrayLikeToList(value);
-            if (objects.size() > 0) {
+            if (!objects.isEmpty()) {
                 append(tableBase.rowMapColumnMapper.apply(column));
                 append(" in (");
                 append(String.join(",", Collections.nCopies(objects.size(), "?")));
@@ -456,7 +456,7 @@ public class WhereBase {
                     @Comment(name = "value", value = "值") Object value) {
         if (condition && value != null) {
             List<Object> objects = StreamExtension.arrayLikeToList(value);
-            if (objects.size() > 0) {
+            if (!objects.isEmpty()) {
                 append(tableBase.rowMapColumnMapper.apply(column));
                 append("not in (");
                 append(String.join(",", Collections.nCopies(objects.size(), "?")));
