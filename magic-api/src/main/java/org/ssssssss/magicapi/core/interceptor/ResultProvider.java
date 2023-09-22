@@ -2,9 +2,9 @@ package org.ssssssss.magicapi.core.interceptor;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.ssssssss.magicapi.core.context.RequestEntity;
 import org.ssssssss.magicapi.modules.db.model.Page;
 import org.ssssssss.magicapi.modules.db.model.PageResult;
-import org.ssssssss.magicapi.core.context.RequestEntity;
 import org.ssssssss.script.exception.MagicScriptAssertException;
 import org.ssssssss.script.exception.MagicScriptException;
 import org.ssssssss.script.functions.ObjectConvertExtension;
@@ -105,7 +105,7 @@ public interface ResultProvider {
 	 * @param total         总数
 	 * @param data          数据内容
 	 */
-	default PageResult buildPageResult(RequestEntity requestEntity, Page page, long total, List<Map<String, Object>> data) {
+	default Object buildPageResult(RequestEntity requestEntity, Page page, long total, List<Map<String, Object>> data) {
 		return new PageResult<>(total, data);
 	}
 

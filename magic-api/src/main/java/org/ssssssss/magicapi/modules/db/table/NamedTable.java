@@ -10,7 +10,7 @@ import org.ssssssss.magicapi.modules.db.BoundSql;
 import org.ssssssss.magicapi.modules.db.SQLModule;
 import org.ssssssss.magicapi.modules.db.inteceptor.NamedTableInterceptor;
 import org.ssssssss.magicapi.modules.db.model.Page;
-import org.ssssssss.magicapi.modules.db.model.PageResult;
+import org.ssssssss.magicapi.modules.db.model.PageResultBuilder;
 import org.ssssssss.magicapi.modules.db.model.SqlMode;
 import org.ssssssss.script.annotation.Comment;
 import org.ssssssss.script.runtime.RuntimeContext;
@@ -464,21 +464,21 @@ public class NamedTable extends TableBase implements JoinInterface {
 	}
 
 	@Comment("执行分页查询")
-	public PageResult page(RuntimeContext runtimeContext) {
+	public Object page(RuntimeContext runtimeContext) {
 		preHandle(SqlMode.PAGE);
-		PageResult pageResult = sqlModule.page(buildSelect(runtimeContext));
-		mapperResults(runtimeContext, pageResult.getList());
-		return pageResult;
+		PageResultBuilder<Map<String, Object>> pageResultBuilder = sqlModule.executePage(buildSelect(runtimeContext));
+		mapperResults(runtimeContext, pageResultBuilder.getList());
+		return sqlModule.buildPageResult(pageResultBuilder);
 	}
 
 	@Comment("执行分页查询，分页条件手动传入")
-	public PageResult page(RuntimeContext runtimeContext,
+	public Object page(RuntimeContext runtimeContext,
 					   @Comment(name = "limit", value = "限制条数") long limit,
 					   @Comment(name = "offset", value = "跳过条数") long offset) {
 		preHandle(SqlMode.PAGE);
-		PageResult pageResult = sqlModule.page(buildSelect(runtimeContext), new Page(limit, offset));
-		mapperResults(runtimeContext, pageResult.getList());
-		return pageResult;
+		PageResultBuilder<Map<String, Object>> pageResultBuilder = sqlModule.executePage(buildSelect(runtimeContext), new Page(limit, offset));
+		mapperResults(runtimeContext, pageResultBuilder.getList());
+		return sqlModule.buildPageResult(pageResultBuilder);
 	}
 
 	@Comment("执行update语句")

@@ -17,7 +17,7 @@ import org.ssssssss.magicapi.modules.db.dialect.DialectAdapter;
 import org.ssssssss.magicapi.modules.db.inteceptor.NamedTableInterceptor;
 import org.ssssssss.magicapi.modules.db.inteceptor.SQLInterceptor;
 import org.ssssssss.magicapi.modules.db.model.Page;
-import org.ssssssss.magicapi.modules.db.model.PageResult;
+import org.ssssssss.magicapi.modules.db.model.PageResultBuilder;
 import org.ssssssss.magicapi.modules.db.model.SqlTypes;
 import org.ssssssss.magicapi.modules.db.provider.PageProvider;
 import org.ssssssss.magicapi.modules.db.table.NamedTable;
@@ -551,9 +551,15 @@ public class SQLModule implements DynamicAttribute<SQLModule, SQLModule>, Dynami
 	}
 
 	@Transient
-	public PageResult page(BoundSql boundSql) {
+	public Object page(BoundSql boundSql) {
 		Page page = pageProvider.getPage(boundSql.getRuntimeContext());
 		return page(boundSql, page);
+	}
+
+	@Transient
+	public PageResultBuilder<Map<String, Object>> executePage(BoundSql boundSql) {
+		Page page = pageProvider.getPage(boundSql.getRuntimeContext());
+		return executePage(boundSql, page);
 	}
 
 	@Transient
@@ -599,7 +605,12 @@ public class SQLModule implements DynamicAttribute<SQLModule, SQLModule>, Dynami
 		return page(count, boundSql, new Page(limit, offset), null);
 	}
 
-	private PageResult page(int count, BoundSql boundSql, Page page, Dialect dialect) {
+	private Object page(int count, BoundSql boundSql, Page page, Dialect dialect) {
+		return buildPageResult(executePage(count, boundSql, page, dialect));
+	}
+
+	@Transient
+	public PageResultBuilder<Map<String, Object>> executePage(int count, BoundSql boundSql, Page page, Dialect dialect) {
 		List<Map<String, Object>> list = null;
 		if (count > 0) {
 			if (dialect == null) {
@@ -608,17 +619,32 @@ public class SQLModule implements DynamicAttribute<SQLModule, SQLModule>, Dynami
 			BoundSql pageBoundSql = buildPageBoundSql(dialect, boundSql, page.getOffset(), page.getLimit());
 			list = pageBoundSql.execute(this.sqlInterceptors, () -> queryForList(pageBoundSql));
 		}
-		RequestEntity requestEntity = RequestContext.getRequestEntity();
-		return resultProvider.buildPageResult(requestEntity, page, count, list);
+
+		return new PageResultBuilder<>(page, count, list);
 	}
 
 	@Transient
-	public PageResult page(BoundSql boundSql, Page page) {
+	public Object buildPageResult(PageResultBuilder<Map<String, Object>> builder) {
+		RequestEntity requestEntity = RequestContext.getRequestEntity();
+		return resultProvider.buildPageResult(requestEntity, builder.getPage(), builder.getTotal(), builder.getList());
+	}
+
+	@Transient
+	public Object page(BoundSql boundSql, Page page) {
 		assertDatasourceNotNull();
 		Dialect dialect = dataSourceNode.getDialect(dialectAdapter);
 		BoundSql countBoundSql = boundSql.copy(dialect.getCountSql(boundSql.getSql()));
 		int count = selectInt(countBoundSql);
 		return page(count, boundSql, page, dialect);
+	}
+
+	@Transient
+	public PageResultBuilder<Map<String, Object>> executePage(BoundSql boundSql, Page page) {
+		assertDatasourceNotNull();
+		Dialect dialect = dataSourceNode.getDialect(dialectAdapter);
+		BoundSql countBoundSql = boundSql.copy(dialect.getCountSql(boundSql.getSql()));
+		int count = selectInt(countBoundSql);
+		return executePage(count, boundSql, page, dialect);
 	}
 
 	/**

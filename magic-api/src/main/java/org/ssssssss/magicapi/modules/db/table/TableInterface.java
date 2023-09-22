@@ -1,6 +1,5 @@
 package org.ssssssss.magicapi.modules.db.table;
 
-import org.ssssssss.magicapi.modules.db.model.PageResult;
 import org.ssssssss.script.annotation.Comment;
 import org.ssssssss.script.runtime.RuntimeContext;
 
@@ -42,12 +41,12 @@ public interface TableInterface {
     }
 
     @Comment("执行分页查询")
-    default PageResult page(RuntimeContext runtimeContext) {
+    default Object page(RuntimeContext runtimeContext) {
         return getNamedTable().page(runtimeContext);
     }
 
     @Comment("执行分页查询，分页条件手动传入")
-    default PageResult page(RuntimeContext runtimeContext,
+    default Object page(RuntimeContext runtimeContext,
                             @Comment(name = "limit", value = "限制条数") long limit,
                             @Comment(name = "offset", value = "跳过条数") long offset) {
         return getNamedTable().page(runtimeContext, limit, offset);
