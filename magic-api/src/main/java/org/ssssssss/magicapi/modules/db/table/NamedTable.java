@@ -1,8 +1,6 @@
 package org.ssssssss.magicapi.modules.db.table;
 
-import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.util.CollectionUtils;
 import org.ssssssss.magicapi.core.context.RequestContext;
 import org.ssssssss.magicapi.core.context.RequestEntity;
 import org.ssssssss.magicapi.core.exception.MagicAPIException;
@@ -49,8 +47,6 @@ public class NamedTable extends TableBase implements JoinInterface {
 
 	List<JoinedTable> joinedTables = new ArrayList<>();
 
-	List<NamedTable> mappedTables = new ArrayList<>();
-
 	public NamedTable(String tableName, String alias, SQLModule sqlModule, Function<String, String> rowMapColumnMapper, List<NamedTableInterceptor> namedTableInterceptors) {
 		super(tableName, alias, sqlModule, rowMapColumnMapper, namedTableInterceptors);
 	}
@@ -67,7 +63,6 @@ public class NamedTable extends TableBase implements JoinInterface {
 		namedTable.groups = new ArrayList<>(groups);
 		namedTable.orders = new ArrayList<>(orders);
 		namedTable.joinedTables = new ArrayList<>(joinedTables);
-		namedTable.mappedTables = new ArrayList<>(mappedTables);
 		namedTable.excludeColumns = new HashSet<>(excludeColumns);
 		namedTable.rowMapColumnMapper = this.rowMapColumnMapper;
 		namedTable.defaultPrimaryValue = this.defaultPrimaryValue;
@@ -88,59 +83,6 @@ public class NamedTable extends TableBase implements JoinInterface {
 			joinedTables.add(join);
 		}
 		return join;
-	}
-
-	@Comment("字段映射")
-	public NamedTable mapping(@Comment(name = "condition", value = "判断表达式，当为true时拼接条件") boolean condition,
-							  @Comment(name = "tableName", value = "映射表名") String tableName,
-							  @Comment(name = "keyProperty", value = "映射主键属性") String keyProperty,
-							  @Comment(name = "property", value = "源属性") String property,
-							  @Comment(name = "properties", value = "映射属性集合") String... properties) {
-		if (condition) {
-			NamedTable map = new NamedTable(tableName, null, sqlModule, rowMapColumnMapper, namedTableInterceptors);
-			map.column(keyProperty).columns(properties);
-			map.where.tokens.add(keyProperty);
-			map.where.params.add(property);
-			mappedTables.add(map);
-		}
-		return this;
-	}
-
-	@Comment("字段映射")
-	public NamedTable mapping(@Comment(name = "tableName", value = "映射表名") String tableName,
-						  @Comment(name = "keyProperty", value = "映射主键属性") String keyProperty,
-						  @Comment(name = "property", value = "源属性") String property,
-						  @Comment(name = "properties", value = "映射字段集合") String... properties) {
-		return mapping(true, tableName, keyProperty, property, properties);
-	}
-
-	@Comment("字典映射")
-	public NamedTable dict(@Comment(name = "condition", value = "判断表达式，当为true时拼接条件") boolean condition,
-						   @Comment(name = "tableName", value = "字典项表名") String tableName,
-						   @Comment(name = "typeProperty", value = "字典类型属性") String typeProperty,
-						   @Comment(name = "typeValue", value = "字典类型值") String typeValue,
-						   @Comment(name = "valueProperty", value = "查询字典项属性") String valueProperty,
-						   @Comment(name = "property", value = "源属性") String property,
-						   @Comment(name = "properties", value = "映射字段集合") String... properties) {
-		if (condition) {
-			NamedTable map = new NamedTable(tableName, null, sqlModule, rowMapColumnMapper, namedTableInterceptors);
-			map.column(valueProperty).columns(properties);
-			map.where.tokens.add(valueProperty);
-			map.where.params.add(property);
-			map.where.eq(typeProperty, typeValue);
-			mappedTables.add(map);
-		}
-		return this;
-	}
-
-	@Comment("字典映射")
-	public NamedTable dict(@Comment(name = "tableName", value = "字典项表名") String tableName,
-						   @Comment(name = "typeProperty", value = "字典类型字段") String typeProperty,
-						   @Comment(name = "typeValue", value = "字典类型值") String typeValue,
-						   @Comment(name = "valueProperty", value = "查询字典项字段") String valueProperty,
-						   @Comment(name = "property", value = "源属性") String property,
-						   @Comment(name = "properties", value = "映射字段集合") String... properties) {
-		return dict(true, tableName, typeProperty, typeValue, valueProperty, property, properties);
 	}
 
 	@Comment("使用去重")
@@ -419,55 +361,22 @@ public class NamedTable extends TableBase implements JoinInterface {
 		return batchInsert(collection, 100);
 	}
 
-	private void mapperResults(RuntimeContext runtimeContext, List<Map<String, Object>> results) {
-		if (CollectionUtils.isEmpty(results)) {
-			return;
-		}
-		for (NamedTable mappedTable : mappedTables) {
-			Object property = mappedTable.where.params.get(0);
-			List<Map<String, Object>> mapResults = results.stream()
-					.filter(x -> ObjectUtils.isNotEmpty(x.get(property))).collect(Collectors.toList());
-			if (CollectionUtils.isEmpty(mapResults)) {
-				continue;
-			}
-			String field = mappedTable.where.tokens.get(0);
-			mappedTable.where.tokens.remove(0);
-			mappedTable.where.params.remove(0);
-			mappedTable.where.in(field, mapResults.stream().map(x -> x.get(property)).distinct().collect(Collectors.toList()));
-			Map<Object, Map<String, Object>> mappedMap = mappedTable.select(runtimeContext).stream()
-					.collect(Collectors.toMap(x -> x.get(field), x -> {
-						x.remove(field);
-						return x;
-					}, (x, y) -> x));
-			mapResults.stream().forEach(x -> {
-				if (mappedMap.containsKey(x.get(property))) {
-					x.putAll(mappedMap.get(x.get(property)));
-				}
-			});
-		}
-	}
-
 	@Comment("执行`select`查询")
 	public List<Map<String, Object>> select(RuntimeContext runtimeContext) {
 		preHandle(SqlMode.SELECT);
-		List<Map<String, Object>> results = sqlModule.select(buildSelect(runtimeContext));
-		mapperResults(runtimeContext, results);
-		return results;
+		return sqlModule.select(buildSelect(runtimeContext));
 	}
 
 	@Comment("执行`selectOne`查询")
 	public Map<String, Object> selectOne(RuntimeContext runtimeContext) {
 		preHandle(SqlMode.SELECT_ONE);
-		Map<String, Object> result = sqlModule.selectOne(buildSelect(runtimeContext));
-		mapperResults(runtimeContext, Arrays.asList(result));
-		return result;
+		return sqlModule.selectOne(buildSelect(runtimeContext));
 	}
 
 	@Comment("执行分页查询")
 	public Object page(RuntimeContext runtimeContext) {
 		preHandle(SqlMode.PAGE);
 		PageResultBuilder<Map<String, Object>> pageResultBuilder = sqlModule.executePage(buildSelect(runtimeContext));
-		mapperResults(runtimeContext, pageResultBuilder.getList());
 		return sqlModule.buildPageResult(pageResultBuilder);
 	}
 
@@ -477,7 +386,6 @@ public class NamedTable extends TableBase implements JoinInterface {
 					   @Comment(name = "offset", value = "跳过条数") long offset) {
 		preHandle(SqlMode.PAGE);
 		PageResultBuilder<Map<String, Object>> pageResultBuilder = sqlModule.executePage(buildSelect(runtimeContext), new Page(limit, offset));
-		mapperResults(runtimeContext, pageResultBuilder.getList());
 		return sqlModule.buildPageResult(pageResultBuilder);
 	}
 
